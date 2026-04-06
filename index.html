@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html lang="zh-HK">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>餐桌禮儀大師 - 專業版</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        html, body { 
+            margin: 0; padding: 0; width: 100%; height: 100%; 
+            overflow: hidden; background-color: #ffffff;
+            position: fixed;
+        }
+        .touch-none-strict { 
+            touch-action: none; 
+            user-select: none;
+            -webkit-user-select: none;
+        }
+        .game-container {
+            width: 100%; height: 100%;
+            display: flex; flex-direction: column;
+            background: white;
+        }
+        .inventory-scroll {
+            scrollbar-width: none; 
+            -ms-overflow-style: none;  
+        }
+        .inventory-scroll::-webkit-scrollbar { display: none; }
+        
+        .anchor-point {
+            width: 18px;
+            height: 18px;
+            background-color: rgba(59, 130, 246, 0.4);
+            border: 2px solid white;
+            border-radius: 50%;
+            position: absolute;
+            transform: translate(-50%, -50%);
+            z-index: 1;
+            animation: pulse 2s infinite;
+            pointer-events: none;
+        }
+        @keyframes pulse {
+            0%, 100% { transform: translate(-50%, -50%) scale(1); opacity: 0.6; }
+            50% { transform: translate(-50%, -50%) scale(1.4); opacity: 0.2; }
+        }
+
+        .modal-active {
+            opacity: 1 !important;
+            pointer-events: auto !important;
+            transform: scale(1) !important;
+        }
+
+        .item-label {
+            position: absolute;
+            bottom: -18px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0,0,0,0.7);
+            color: white;
+            font-size: 10px;
+            padding: 2px 6px;
+            border-radius: 4px;
+            white-space: nowrap;
+            pointer-events: none;
+            z-index: 30;
+        }
+
+        .item-img {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+            pointer-events: none;
+        }
+        
+        .dragging {
+            opacity: 0.8;
+            transform: scale(1.1) !important;
+            box-shadow: 0 10px 20px rgba(0,0,0,0.2);
+        }
+    </style>
+</head>
+<body class="text-gray-800">
+
+    <div class="game-container">
+        <!-- 主選單 -->
+        <div id="screen-menu" class="flex-1 flex flex-col items-center justify-center p-6 text-center">
+            <h1 class="text-3xl md:text-5xl font-extrabold text-black mb-2 tracking-wide">餐桌禮儀大師</h1>
+            <p class="text-gray-500 mb-8 font-medium">拖拽餐具至提示點，點擊已擺放的物件可旋轉角度。</p>
+            <div class="flex flex-col gap-3 w-full max-w-xs">
+                <button onclick="showIntro(1)" class="bg-white border-2 border-gray-200 py-4 px-6 rounded-xl font-bold flex justify-between items-center hover:border-black transition-all">
+                    <span>初階佈置</span> <span>⭐</span>
+                </button>
+                <button onclick="showIntro(2)" class="bg-white border-2 border-gray-200 py-4 px-6 rounded-xl font-bold flex justify-between items-center hover:border-black transition-all">
+                    <span>中階佈置</span> <span>⭐⭐</span>
+                </button>
+                <button onclick="showIntro(3)" class="bg-black text-white py-4 px-6 rounded-xl font-bold flex justify-between items-center shadow-lg active:scale-95 transition-all">
+                    <span>正式晚宴</span> <span>⭐⭐⭐</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- 關卡介紹 -->
+        <div id="screen-intro" class="hidden fixed inset-0 bg-white z-[100] flex flex-col p-6">
+            <h2 id="intro-title" class="text-2xl font-bold mb-4 text-center border-b pb-2">關卡介紹</h2>
+            <div id="intro-items-grid" class="flex-1 grid grid-cols-2 sm:grid-cols-3 gap-3 overflow-y-auto py-4"></div>
+            <div class="flex gap-4 pt-4">
+                <button onclick="hideIntro()" class="flex-1 bg-gray-200 py-4 rounded-xl font-bold">返回</button>
+                <button onclick="startGame()" class="flex-[2] bg-black text-white py-4 rounded-xl font-bold shadow-lg">開始挑戰</button>
+            </div>
+        </div>
+
+        <!-- 遊戲主畫面 -->
+        <div id="screen-game" class="hidden flex-1 flex flex-col overflow-hidden">
+            <div class="h-14 border-b flex justify-between items-center px-4 bg-white shrink-0 z-40">
+                <button onclick="returnToMenu()" class="text-xs bg-gray-100 px-3 py-1.5 rounded-lg font-bold">退出</button>
+                <div class="font-bold text-sm" id="game-level-text">等級</div>
+                <button onclick="evaluateBoard()" class="bg-blue-600 text-white px-4 py-1.5 rounded-lg font-bold text-sm shadow-md active:bg-blue-700">完成佈置</button>
+            </div>
+            <div class="flex-1 relative bg-white flex items-center justify-center p-2 overflow-hidden">
+                <div id="placemat" class="w-full h-full max-w-[1200px] max-h-[800px] relative border border-gray-100 rounded-3xl overflow-hidden bg-slate-50/20"></div>
+            </div>
+            <div class="h-32 bg-gray-50 border-t flex flex-col relative shrink-0 z-40">
+                <div class="absolute -top-2.5 left-1/2 -translate-x-1/2 bg-blue-500 text-white text-[10px] px-3 py-0.5 rounded-full font-bold uppercase tracking-wider">餐具欄</div>
+                <div id="inventory-list" class="flex-1 inventory-scroll overflow-x-auto flex items-center px-6 gap-6"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 檢查結果彈窗 -->
+    <div id="modal-hint" class="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm opacity-0 pointer-events-none transition-all duration-300 scale-95">
+        <div class="bg-white rounded-3xl shadow-2xl p-8 max-w-md w-full flex flex-col max-h-[85vh] border border-gray-100">
+            <div class="flex items-center gap-3 mb-4 border-b pb-4">
+                <span class="text-2xl">📋</span>
+                <h3 class="text-xl font-bold text-black">佈置檢查結果</h3>
+            </div>
+            <div class="overflow-y-auto flex-1 space-y-4 pr-1" id="hint-text-list"></div>
+            <button onclick="closeHint()" class="mt-8 bg-black text-white font-bold py-4 rounded-2xl w-full shadow-lg active:scale-95 transition-transform">
+                回去調整位置
+            </button>
+        </div>
+    </div>
+
+    <!-- 獲勝彈窗 -->
+    <div id="modal-win" class="fixed inset-0 bg-white/98 z-[10000] flex items-center justify-center p-6 text-center opacity-0 pointer-events-none transition-all duration-500">
+        <div class="transform scale-90 transition-transform duration-500" id="win-content">
+            <div class="text-8xl mb-6">🏆</div>
+            <h2 class="text-4xl font-black mb-3 text-black">禮儀大師！</h2>
+            <p class="text-gray-500 mb-10 text-lg">您的擺放非常專業，完全符合標準。</p>
+            <button onclick="returnToMenu()" class="bg-blue-600 text-white font-bold py-5 px-16 rounded-2xl shadow-2xl active:scale-95 transition-all text-xl">
+                返回主選單
+            </button>
+        </div>
+    </div>
+
+    <script>
+        /**
+         * 1. 修正旋轉角度為 45 度步進 (支援牛油刀斜放)
+         * 2. 修正甜品匙 (90度, 柄向右) 及 甜品叉 (270度, 柄向左)
+         */
+        const ITEMS = [
+            { id: 'plate_main', name: '主菜碟', imgUrl: 'https://i.imgur.com/06yl3m4.png', x: 50, y: 55, targetRot: 0, scale: 2.5, zIndex: 10, hint: '主菜碟應放在正中央。' },
+            { id: 'fork_main', name: '主菜叉', imgUrl: 'https://i.imgur.com/oZ1ZTsF.png', x: 38, y: 55, targetRot: 0, scale: 1.4, zIndex: 15, hint: '主菜叉放在碟子左側。' },
+            { id: 'knife_main', name: '主菜刀', imgUrl: 'https://i.imgur.com/8meMoZm.png', x: 62, y: 55, targetRot: 0, scale: 1.4, zIndex: 15, hint: '主菜刀在碟子右側。' },
+            { id: 'spoon_soup', name: '湯匙', imgUrl: 'https://i.imgur.com/BGhbyHu.png', x: 70, y: 55, targetRot: 0, scale: 1.2, zIndex: 15, hint: '湯匙放在最右側。' },
+            { id: 'plate_bread', name: '麵包碟', imgUrl: 'https://i.imgur.com/rTmHS8e.png', x: 25, y: 30, targetRot: 0, scale: 1.5, zIndex: 10, hint: '麵包碟位於左上方。' },
+            { id: 'knife_butter', name: '牛油刀', imgUrl: 'https://i.imgur.com/AWxv9H2.png', x: 25, y: 30, targetRot: 45, scale: 0.9, zIndex: 20, hint: '牛油刀斜放在麵包碟上 (45度)。' },
+            { id: 'glass_water', name: '水杯', imgUrl: 'https://i.imgur.com/mefXH0C.png', x: 72, y: 30, targetRot: 0, scale: 1.3, zIndex: 15, hint: '水杯放在右上方。' },
+            
+            // 甜品餐具修正：y軸拉開距離，調整正確旋轉角度
+            { id: 'spoon_dessert', name: '甜品匙', imgUrl: 'https://i.imgur.com/2Kn67KA.png', x: 50, y: 22, targetRot: 270, scale: 0.9, zIndex: 15, hint: '甜品匙橫放在最上方，柄向右 (90度)。' },
+            { id: 'fork_dessert', name: '甜品叉', imgUrl: 'https://i.imgur.com/eB5BMpS.png', x: 50, y: 28, targetRot: 90, scale: 0.9, zIndex: 15, hint: '甜品叉在甜品匙下方，柄向左 (270度)。' },
+            
+            { id: 'fork_salad', name: '沙律叉', imgUrl: 'https://i.imgur.com/CtSh2rp.png', x: 32, y: 55, targetRot: 0, scale: 1.2, zIndex: 15, hint: '沙律叉放在主菜叉的外側。' },
+            { id: 'knife_appetizer', name: '前菜刀', imgUrl: 'https://i.imgur.com/8meMoZm.png', x: 78, y: 55, targetRot: 0, scale: 1.2, zIndex: 15, hint: '前菜刀放在最右側。' }
+        ];
+
+        const LEVELS = {
+            1: { name: '初階佈置', items: ['plate_main', 'fork_main', 'knife_main', 'spoon_soup'] },
+            2: { name: '中階佈置', items: ['plate_main', 'fork_main', 'knife_main', 'spoon_soup', 'plate_bread', 'knife_butter', 'glass_water', 'spoon_dessert'] },
+            3: { name: '正式晚宴', items: ['plate_main', 'fork_main', 'knife_main', 'spoon_soup', 'plate_bread', 'knife_butter', 'glass_water', 'spoon_dessert', 'fork_dessert', 'fork_salad', 'knife_appetizer'] }
+        };
+
+        let currentLevelId = 1;
+        let draggedItem = null;
+        let isDragging = false;
+        let startX, startY, offsetX, offsetY;
+
+        function showIntro(levelId) {
+            currentLevelId = levelId;
+            document.getElementById('intro-title').innerText = LEVELS[levelId].name;
+            const grid = document.getElementById('intro-items-grid');
+            grid.innerHTML = '';
+            LEVELS[levelId].items.forEach(id => {
+                const item = ITEMS.find(i => i.id === id);
+                grid.innerHTML += `
+                    <div class="bg-gray-50 p-3 rounded-xl text-center border border-gray-100 flex flex-col items-center justify-center">
+                        <img src="${item.imgUrl}" class="w-10 h-10 mb-1 object-contain">
+                        <div class="text-[10px] font-bold text-gray-500">${item.name}</div>
+                    </div>`;
+            });
+            document.getElementById('screen-intro').classList.remove('hidden');
+        }
+
+        function hideIntro() { document.getElementById('screen-intro').classList.add('hidden'); }
+
+        function startGame() {
+            hideIntro();
+            document.getElementById('screen-menu').classList.add('hidden');
+            document.getElementById('screen-game').classList.remove('hidden');
+            document.getElementById('game-level-text').innerText = LEVELS[currentLevelId].name;
+            initGame();
+        }
+
+        function initGame() {
+            const inventory = document.getElementById('inventory-list');
+            const placemat = document.getElementById('placemat');
+            placemat.innerHTML = ''; inventory.innerHTML = '';
+
+            const levelItems = LEVELS[currentLevelId].items;
+            
+            // 繪製提示點
+            const uniquePoints = []; 
+            levelItems.forEach(id => {
+                const def = ITEMS.find(i => i.id === id);
+                const pointKey = `${def.x}-${def.y}`;
+                if (!uniquePoints.includes(pointKey)) {
+                    uniquePoints.push(pointKey);
+                    const anchor = document.createElement('div');
+                    anchor.className = 'anchor-point';
+                    anchor.style.left = `${def.x}%`;
+                    anchor.style.top = `${def.y}%`;
+                    placemat.appendChild(anchor);
+                }
+
+                const el = document.createElement('div');
+                el.className = 'draggable-item w-16 h-16 bg-white rounded-xl shadow-sm border border-gray-200 flex items-center justify-center cursor-grab touch-none-strict shrink-0 relative p-1';
+                el.dataset.id = def.id; 
+                el.dataset.rot = "0"; 
+                el.dataset.placed = "false";
+                
+                el.innerHTML = `
+                    <div class="rotatable-inner transition-transform duration-300 pointer-events-none w-full h-full" style="transform: scale(${def.scale})">
+                        <img src="${def.imgUrl}" class="item-img">
+                    </div>
+                    <div class="item-label">${def.name}</div>
+                    <div class="rotate-hint absolute -top-1 -right-1 bg-blue-500 text-white w-6 h-6 rounded-full text-[12px] flex items-center justify-center opacity-0 font-bold z-50 shadow-md">↻</div>
+                `;
+                
+                el.addEventListener('pointerdown', onPointerDown);
+                inventory.appendChild(el);
+            });
+        }
+
+        function onPointerDown(e) {
+            draggedItem = e.currentTarget;
+            draggedItem.setPointerCapture(e.pointerId);
+            const rect = draggedItem.getBoundingClientRect();
+            offsetX = e.clientX - rect.left; 
+            offsetY = e.clientY - rect.top;
+            startX = e.clientX; 
+            startY = e.clientY;
+            isDragging = false;
+        }
+
+        document.addEventListener('pointermove', (e) => {
+            if (!draggedItem) return;
+            if (!isDragging && Math.hypot(e.clientX - startX, e.clientY - startY) > 5) {
+                isDragging = true;
+                draggedItem.classList.add('dragging');
+                draggedItem.style.position = 'fixed';
+                draggedItem.style.zIndex = '1000';
+                document.body.appendChild(draggedItem);
+            }
+            if (isDragging) {
+                draggedItem.style.left = `${e.clientX - offsetX}px`;
+                draggedItem.style.top = `${e.clientY - offsetY}px`;
+            }
+        });
+
+        document.addEventListener('pointerup', (e) => {
+            if (!draggedItem) return;
+            draggedItem.classList.remove('dragging');
+            if (!isDragging) {
+                if(draggedItem.dataset.placed === "true") rotateItem(draggedItem);
+            } else {
+                handleDrop(draggedItem);
+            }
+            draggedItem = null;
+            isDragging = false;
+        });
+
+        function handleDrop(item) {
+            const placemat = document.getElementById('placemat');
+            const pRect = placemat.getBoundingClientRect();
+            const centerX = item.getBoundingClientRect().left + 32;
+            const centerY = item.getBoundingClientRect().top + 32;
+
+            if (centerX > pRect.left && centerX < pRect.right && centerY > pRect.top && centerY < pRect.bottom) {
+                const px = ((centerX - pRect.left) / pRect.width) * 100;
+                const py = ((centerY - pRect.top) / pRect.height) * 100;
+                
+                const defs = LEVELS[currentLevelId].items.map(id => ITEMS.find(i => i.id === id));
+                let snapped = false;
+                
+                for (const d of defs) {
+                    // 吸附半徑 5%
+                    if (Math.hypot(px - d.x, py - d.y) < 5) {
+                        snapTo(item, d.x, d.y);
+                        snapped = true; 
+                        break;
+                    }
+                }
+                if (!snapped) snapTo(item, px, py); 
+            } else {
+                returnToInventory(item);
+            }
+        }
+
+        function snapTo(item, x, y) {
+            item.dataset.placed = "true"; 
+            item.dataset.x = x.toFixed(2); 
+            item.dataset.y = y.toFixed(2);
+            item.style.position = 'absolute';
+            item.style.left = `${x}%`; 
+            item.style.top = `${y}%`;
+            item.style.transform = 'translate(-50%, -50%)';
+            item.classList.remove('bg-white', 'border-gray-200', 'shadow-sm');
+            item.classList.add('bg-transparent', 'border-transparent');
+            item.querySelector('.rotate-hint').style.opacity = '1';
+            document.getElementById('placemat').appendChild(item);
+        }
+
+        function returnToInventory(item) {
+            item.dataset.placed = "false";
+            item.dataset.rot = "0";
+            item.style.position = 'relative'; 
+            item.style.left = 'auto'; 
+            item.style.top = 'auto'; 
+            item.style.transform = 'none';
+            item.classList.add('bg-white', 'border-gray-200', 'shadow-sm');
+            item.querySelector('.rotate-hint').style.opacity = '0';
+            const def = ITEMS.find(i => i.id === item.dataset.id);
+            item.querySelector('.rotatable-inner').style.transform = `rotate(0deg) scale(${def.scale})`;
+            document.getElementById('inventory-list').appendChild(item);
+        }
+
+        function rotateItem(item) {
+            // 修改點擊旋轉為 45 度步進
+            let r = (parseInt(item.dataset.rot) + 45) % 360; 
+            item.dataset.rot = r;
+            const def = ITEMS.find(i => i.id === item.dataset.id);
+            item.querySelector('.rotatable-inner').style.transform = `rotate(${r}deg) scale(${def.scale})`;
+        }
+
+        function evaluateBoard() {
+            const levelItemsIds = LEVELS[currentLevelId].items;
+            let errors = [];
+            
+            levelItemsIds.forEach(id => {
+                const def = ITEMS.find(i => i.id === id);
+                const el = document.querySelector(`#placemat .draggable-item[data-id="${id}"]`);
+                
+                if (!el || el.dataset.placed === "false") {
+                    errors.push(`
+                        <div class="p-4 bg-red-50 rounded-2xl text-red-700 font-bold border border-red-100 flex items-center gap-3 text-sm">
+                            <span>❌</span> <span>${def.name} 尚未入座</span>
+                        </div>`);
+                    return;
+                }
+
+                const currentX = parseFloat(el.dataset.x);
+                const currentY = parseFloat(el.dataset.y);
+                const currentRot = parseInt(el.dataset.rot);
+
+                const dist = Math.hypot(currentX - def.x, currentY - def.y);
+                // 判定條件：距離偏差小於 5% 且 角度正確
+                const rotCorrect = (currentRot === def.targetRot);
+
+                if (dist > 5 || !rotCorrect) {
+                    errors.push(`
+                        <div class="p-4 bg-blue-50 border-l-8 border-blue-500 rounded-r-2xl text-sm">
+                            <div class="font-bold text-blue-900">⚠️ ${def.name} 擺放不周</div>
+                            <div class="text-xs text-blue-700/80 mt-1 italic">${def.hint}</div>
+                        </div>`);
+                }
+            });
+
+            if (errors.length === 0) {
+                document.getElementById('modal-win').classList.add('modal-active');
+            } else {
+                document.getElementById('hint-text-list').innerHTML = errors.join('');
+                document.getElementById('modal-hint').classList.add('modal-active');
+            }
+        }
+
+        function closeHint() { document.getElementById('modal-hint').classList.remove('modal-active'); }
+        function returnToMenu() { location.reload(); }
+    </script>
+</body>
+</html>
